@@ -1,7 +1,7 @@
 import pygame
 import math
 
-def create_ball(x, y, radius, color, bounce=0.8):
+def create_ball(x, y, radius, color, bounce=0.8, friction=0.98):
     """Creates a dictionary with all the ball's properties."""
     return {
         "x": x, 
@@ -16,7 +16,9 @@ def create_ball(x, y, radius, color, bounce=0.8):
         "prev_x": x, 
         "prev_y": y,
         "bounce_factor": bounce,           
-        "nearby_balls": []
+        "nearby_balls": [],
+
+        "friction": friction,
     }
 
 def handle_mouse(event, ball):
@@ -111,8 +113,8 @@ def _collide_with_walls(ball, screen_width, screen_height):
         if abs(ball["vel_y"]) < 1:
             ball["vel_y"] = 0
             
-        # Ground friction
-        ball["vel_x"] *= 0.95
+        # --- NEW: Use the ball's unique ground friction! ---
+        ball["vel_x"] *= ball["friction"]
 
 def _collide_with_ball(ball, neighbor):
     """Helper function: Handles math for collision between two balls."""
