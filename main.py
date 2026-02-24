@@ -181,7 +181,7 @@ while running:
             pygame.draw.circle(screen, YELLOW, (int(ball["x"]), int(ball["y"])), ball["radius"], 4)
             
     # to disable the UI, comment out the line below!
-    draw_debug_ui(screen, clock.get_fps())
+    #draw_debug_ui(screen, clock.get_fps())
         
     pygame.display.flip()
     clock.tick(FPS)
