@@ -5,4 +5,6 @@ V0.1 -> Simple Ball simulator :thumbsup:
 
 V0.2 -> Multiple balls and collision
 
-Final -> Friction
+V0.2.1 -> Friction
+
+V0.2.2 -> Optimizations
