@@ -1,5 +1,6 @@
 import pygame
 import math
+from collections import defaultdict
 
 def create_ball(x, y, radius, color, bounce=0.8, friction=0.98):
     """Creates a dictionary with all the ball's properties."""
@@ -61,26 +62,51 @@ def apply_physics(ball, gravity):
         ball["y"] += ball["vel_y"]
 
 def calculate_neighbors(balls):
-    """Finds balls that are close (within 1 extra radius of distance)."""
+    """Finds balls that are close using a spatial hash.
+
+    Uses a grid to reduce pair tests from O(n^2) to roughly O(n).
+    CELL_SIZE is chosen from the maximum ball diameter to keep neighbors
+    within nearby cells.
+    """
     for ball in balls:
         ball["nearby_balls"].clear()
 
-    for i in range(len(balls)):
-        b1 = balls[i]
-        for j in range(i + 1, len(balls)):
-            b2 = balls[j]
+    if not balls:
+        return
 
-            dx = b2["x"] - b1["x"]
-            dy = b2["y"] - b1["y"]
-            
-            distance_sq = dx**2 + dy**2
-            
-            sum_radii = b1["radius"] + b2["radius"]
-            max_distance = sum_radii + max(b1["radius"], b2["radius"])
+    # choose cell size based on largest ball to keep neighbors local
+    max_r = max((b["radius"] for b in balls), default=32)
+    CELL_SIZE = max(48, int(max_r * 2))
 
-            if distance_sq < max_distance**2:
-                b1["nearby_balls"].append(b2)
-                b2["nearby_balls"].append(b1)
+    grid = defaultdict(list)
+    for b in balls:
+        cx = int(b["x"]) // CELL_SIZE
+        cy = int(b["y"]) // CELL_SIZE
+        grid[(cx, cy)].append(b)
+
+    # Check a ball against its cell and adjacent cells
+    for b in balls:
+        cx = int(b["x"]) // CELL_SIZE
+        cy = int(b["y"]) // CELL_SIZE
+        bid = id(b)
+        for nx in (cx - 1, cx, cx + 1):
+            for ny in (cy - 1, cy, cy + 1):
+                for other in grid.get((nx, ny), ()):  # neighboring cell
+                    if other is b:
+                        continue
+                    oid = id(other)
+                    # compute vector and squared distance
+                    dx = other["x"] - b["x"]
+                    dy = other["y"] - b["y"]
+                    distance_sq = dx * dx + dy * dy
+                    sum_radii = b["radius"] + other["radius"]
+                    # include a small neighborhood margin to catch near contacts
+                    max_distance = sum_radii + max(b["radius"], other["radius"])
+                    if distance_sq < max_distance * max_distance:
+                        # add pair once (symmetrically) to avoid asymmetry in solver
+                        if bid < oid:
+                            b["nearby_balls"].append(other)
+                            other["nearby_balls"].append(b)
 
 def draw_ball(screen, ball):
     """Draws the ball as a perfect circle."""
@@ -118,62 +144,72 @@ def _collide_with_walls(ball, screen_width, screen_height):
 
 def _collide_with_ball(ball, neighbor):
     """Helper function: Handles math for collision between two balls."""
-    dx = neighbor["x"] - ball["x"]
-    dy = neighbor["y"] - ball["y"]
-    distance = math.sqrt(dx**2 + dy**2)
+    # cache lookups in locals to reduce dict overhead
+    bx = ball["x"]
+    by = ball["y"]
+    nx_ = neighbor["x"]
+    ny_ = neighbor["y"]
+    dx = nx_ - bx
+    dy = ny_ - by
+    distance = math.sqrt(dx * dx + dy * dy)
     sum_radii = ball["radius"] + neighbor["radius"]
 
-    if distance < sum_radii:
-        if distance == 0:
-            distance = 0.01
-            dx = 0.01
+    if distance >= sum_radii:
+        return
 
-        nx = dx / distance
-        ny = dy / distance
+    if distance == 0:
+        distance = 0.01
+        dx = 0.01
 
-        # --- 1. Separate the balls (Resolve Overlap) ---
-        overlap = sum_radii - distance
-        
-        mass_ratio_ball = neighbor["radius"] / sum_radii
-        mass_ratio_neighbor = ball["radius"] / sum_radii
+    # normal vector
+    nx_unit = dx / distance
+    ny_unit = dy / distance
 
-        ball["x"] -= nx * overlap * mass_ratio_ball
-        ball["y"] -= ny * overlap * mass_ratio_ball
-        neighbor["x"] += nx * overlap * mass_ratio_neighbor
-        neighbor["y"] += ny * overlap * mass_ratio_neighbor
+    # --- 1. Separate the balls (Resolve Overlap) ---
+    overlap = sum_radii - distance
+    mass_ratio_ball = neighbor["radius"] / sum_radii
+    mass_ratio_neighbor = ball["radius"] / sum_radii
 
-        # --- 2. Transfer Energy (Bounce) ---
-        rv_x = neighbor["vel_x"] - ball["vel_x"]
-        rv_y = neighbor["vel_y"] - ball["vel_y"]
+    # apply position corrections directly
+    ball["x"] = bx - nx_unit * overlap * mass_ratio_ball
+    ball["y"] = by - ny_unit * overlap * mass_ratio_ball
+    neighbor["x"] = nx_ + nx_unit * overlap * mass_ratio_neighbor
+    neighbor["y"] = ny_ + ny_unit * overlap * mass_ratio_neighbor
 
-        vel_along_normal = rv_x * nx + rv_y * ny
+    # --- 2. Transfer Energy (Bounce) ---
+    rvx = neighbor["vel_x"] - ball["vel_x"]
+    rvy = neighbor["vel_y"] - ball["vel_y"]
+    vel_along_normal = rvx * nx_unit + rvy * ny_unit
 
-        # Only bounce if they are moving towards each other
-        if vel_along_normal > 0:
-            return
+    # Only bounce if they are moving towards each other
+    if vel_along_normal > 0:
+        return
 
-        bounce = min(ball["bounce_factor"], neighbor["bounce_factor"])
-        m1 = ball["radius"]
-        m2 = neighbor["radius"]
+    bounce = min(ball["bounce_factor"], neighbor["bounce_factor"])
+    m1 = ball["radius"]
+    m2 = neighbor["radius"]
 
-        impulse = -(1 + bounce) * vel_along_normal
-        impulse /= (1 / m1) + (1 / m2)
+    impulse = -(1 + bounce) * vel_along_normal
+    impulse /= (1 / m1) + (1 / m2)
 
-        impulse_x = impulse * nx
-        impulse_y = impulse * ny
+    imp_x = impulse * nx_unit
+    imp_y = impulse * ny_unit
 
-        ball["vel_x"] -= impulse_x / m1
-        ball["vel_y"] -= impulse_y / m1
-        neighbor["vel_x"] += impulse_x / m2
-        neighbor["vel_y"] += impulse_y / m2
+    ball["vel_x"] -= imp_x / m1
+    ball["vel_y"] -= imp_y / m1
+    neighbor["vel_x"] += imp_x / m2
+    neighbor["vel_y"] += imp_y / m2
 
 def check_all_collisions(balls, screen_width, screen_height):
     """Narrow Phase: Resolves ALL collisions (walls and neighbors) in one go."""
     for ball in balls:
         # 1. Check walls
         _collide_with_walls(ball, screen_width, screen_height)
-        
-        # 2. Check neighbors
+
+    # 2. Resolve pair collisions once per pair. nearby_balls may contain both
+    # directions; use id ordering to ensure single resolution per pair.
+    for ball in balls:
+        bid = id(ball)
         for neighbor in ball["nearby_balls"]:
-            if id(ball) < id(neighbor):
+            if bid < id(neighbor):
                 _collide_with_ball(ball, neighbor)
