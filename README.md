@@ -8,3 +8,5 @@ V0.2 -> Multiple balls and collision
 V0.2.1 -> Friction
 
 V0.2.2 -> Optimizations
+
+V0.2.3 -> Vsync 

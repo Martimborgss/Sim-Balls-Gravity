@@ -7,7 +7,8 @@ pygame.init()
 
 WIDTH = 1920
 HEIGHT = 1080
-screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME) 
+FLAGS = pygame.NOFRAME | pygame.DOUBLEBUF
+screen = pygame.display.set_mode((WIDTH, HEIGHT), FLAGS, vsync=1)
 pygame.display.set_caption("Simulator - Rigid Balls")
 clock = pygame.time.Clock()
 FPS = 60
@@ -18,7 +19,7 @@ GRAY = (200, 200, 200)
 DARK_GRAY = (50, 50, 50)
 YELLOW = (255, 255, 0)
 
-GRAVITY = 0.981
+GRAVITY = 0.81
 
 balls = []
 MAX_BALLS = 200
