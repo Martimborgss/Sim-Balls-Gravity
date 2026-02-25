@@ -2,6 +2,9 @@ import pygame
 import random
 import math
 from functions import *
+import cProfile, pstats
+pr = cProfile.Profile()
+pr.enable()
 
 pygame.init()
 
@@ -168,7 +171,7 @@ while running:
         
     calculate_neighbors(balls)
     
-    SOLVER_ITERATIONS = 8
+    SOLVER_ITERATIONS = 7
     for _ in range(SOLVER_ITERATIONS):
         check_all_collisions(balls, WIDTH, HEIGHT)
 
@@ -181,9 +184,12 @@ while running:
             pygame.draw.circle(screen, YELLOW, (int(ball["x"]), int(ball["y"])), ball["radius"], 4)
             
     # to disable the UI, comment out the line below!
-    #draw_debug_ui(screen, clock.get_fps())
+    draw_debug_ui(screen, clock.get_fps())
         
     pygame.display.flip()
     clock.tick(FPS)
 
 pygame.quit()
+
+pr.disable()
+pr.dump_stats('profile.prof')
